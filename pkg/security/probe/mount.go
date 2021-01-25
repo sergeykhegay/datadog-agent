@@ -8,12 +8,13 @@
 package probe
 
 import (
-	"github.com/DataDog/gopsutil/process"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/DataDog/gopsutil/process"
 
 	"github.com/cobaugh/osrelease"
 	"github.com/moby/sys/mountinfo"
@@ -101,7 +102,7 @@ func (mr *MountResolver) SyncCache(proc *process.Process) error {
 		mr.insert(*e)
 
 		// init discarder revisions
-		mr.probe.initDiscarderRevision(e)
+		mr.probe.inodeDiscarders.initRevision(e)
 	}
 
 	return nil
@@ -177,7 +178,7 @@ func (mr *MountResolver) Insert(e model.MountEvent) {
 	mr.insert(e)
 
 	// init discarder revisions
-	mr.probe.initDiscarderRevision(&e)
+	mr.probe.inodeDiscarders.initRevision(&e)
 }
 
 func (mr *MountResolver) insert(e model.MountEvent) {

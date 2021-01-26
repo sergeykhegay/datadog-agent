@@ -421,6 +421,8 @@ func (p *ProcessResolver) cacheFlush(ctx context.Context) {
 							delEntry(pid, now)
 						} else if entry.ForkTime.IsZero() && entry.ExecTime.IsZero() {
 							delEntry(pid, now)
+						} else if entry.ExecTimestamp.IsZero() && entry.ForkTimestamp.IsZero() {
+							delEntry(pid, now)
 						}
 					}
 					p.Unlock()

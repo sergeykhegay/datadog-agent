@@ -15,6 +15,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/security/rules"
 	"github.com/DataDog/datadog-agent/pkg/security/secl/eval"
+	"github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -142,17 +143,24 @@ type RulesetLoadedEvent struct {
 	Policies  map[string]string `json:"policies"`
 	Rules     []rules.RuleID    `json:"rules"`
 	Macros    []rules.MacroID   `json:"macros"`
+	Errors    []string          `json:"errors,omitempty"`
 }
 
 // NewRuleSetLoadedEvent returns the rule and a populated custom event for a new_rules_loaded event
-func NewRuleSetLoadedEvent(loadedPolicies map[string]string, loadedRules []rules.RuleID, loadedMacros []rules.MacroID) (*rules.Rule, *CustomEvent) {
+func NewRuleSetLoadedEvent(rs *rules.RuleSet, err *multierror.Error) (*rules.Rule, *CustomEvent) {
+	var errs []string
+	for _, e := range err.Errors {
+		errs = append(errs, e.Error())
+	}
+
 	return newRule(&rules.RuleDefinition{
 			ID: RulesetLoadedRuleID,
 		}), newCustomEvent(CustomRulesetLoadedEventType, RulesetLoadedEvent{
 			Timestamp: time.Now(),
-			Policies:  loadedPolicies,
-			Rules:     loadedRules,
-			Macros:    loadedMacros,
+			Policies:  rs.ListPolicies(),
+			Rules:     rs.ListRuleIDs(),
+			Macros:    rs.ListMacroIDs(),
+			Errors:    errs,
 		}.MarshalJSON)
 }
 

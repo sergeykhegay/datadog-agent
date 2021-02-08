@@ -56,11 +56,12 @@ type Tracer struct {
 
 	httpMonitor *http.Monitor
 
-	perfMap      *manager.PerfMap
-	perfHandler  *ddebpf.PerfHandler
-	batchManager *PerfBatchManager
-	flushIdle    chan chan struct{}
-	stop         chan struct{}
+	perfMap       *manager.PerfMap
+	perfHandler   *ddebpf.PerfHandler
+	batchManager  *PerfBatchManager
+	flushIdle     chan chan struct{}
+	stop          chan struct{}
+	runtimeTracer bool
 
 	// Telemetry
 	perfReceived  int64
@@ -116,8 +117,23 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 		log.Infof("detected platform %s, switch to use kprobes from kernel version < 4.1.0", currKernelVersion)
 	}
 
+	runtimeTracer := false
+	var buf bytecode.AssetReader
+	if config.EnableRuntimeCompiler {
+		buf, err = getRuntimeCompiledTracer(config)
+		if err != nil {
+			if !config.AllowPrecompiledFallback {
+				return nil, fmt.Errorf("error compiling network tracer: %s", err)
+			}
+			log.Warnf("error compiling network tracer, falling back to pre-compiled: %s", err)
+		} else {
+			runtimeTracer = true
+			defer buf.Close()
+		}
+	}
+
 	// Use the config to determine what kernel probes should be enabled
-	enabledProbes, err := config.EnabledProbes(pre410Kernel)
+	enabledProbes, err := config.EnabledProbes(runtimeTracer)
 	if err != nil {
 		return nil, fmt.Errorf("invalid probe configuration: %v", err)
 	}
@@ -149,19 +165,6 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 			string(probes.UdpPortBindingsMap): {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 			string(probes.HttpInFlightMap):    {Type: ebpf.Hash, MaxEntries: uint32(config.MaxTrackedConnections), EditorFlag: manager.EditMaxEntries},
 		},
-	}
-
-	var buf bytecode.AssetReader
-	if config.EnableRuntimeCompiler {
-		buf, err = getRuntimeCompiledTracer(config)
-		if err != nil {
-			if !config.AllowPrecompiledFallback {
-				return nil, fmt.Errorf("error compiling network tracer: %s", err)
-			}
-			log.Warnf("error compiling network tracer, falling back to pre-compiled: %s", err)
-		} else {
-			defer buf.Close()
-		}
 	}
 
 	if buf == nil {
@@ -266,6 +269,7 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 		flushIdle:      make(chan chan struct{}),
 		stop:           make(chan struct{}),
 		buf:            make([]byte, network.ConnectionByteKeyMaxLen),
+		runtimeTracer:  runtimeTracer,
 	}
 
 	tr.perfMap, tr.batchManager, err = tr.initPerfPolling(perfHandlerTCP)
@@ -327,7 +331,11 @@ func runOffsetGuessing(config *config.Config, buf bytecode.AssetReader) ([]manag
 			Max: math.MaxUint64,
 		},
 	}
-	enabledProbes := offsetGuessProbes(config)
+	enabledProbes, err := offsetGuessProbes(config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to configure offset guessing probes: %w", err)
+	}
+
 	for _, p := range offsetMgr.Probes {
 		if _, enabled := enabledProbes[probes.ProbeName(p.Section)]; !enabled {
 			offsetOptions.ExcludedSections = append(offsetOptions.ExcludedSections, p.Section)

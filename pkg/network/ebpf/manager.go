@@ -33,8 +33,8 @@ func NewOffsetManager() *manager.Manager {
 	}
 }
 
-func NewManager(closedHandler, httpHandler *ebpf.PerfHandler) *manager.Manager {
-	return &manager.Manager{
+func NewManager(closedHandler, httpHandler *ebpf.PerfHandler, runtimeTracer bool) *manager.Manager {
+	mgr := &manager.Manager{
 		Maps: []*manager.Map{
 			{Name: string(probes.ConnMap)},
 			{Name: string(probes.TcpStatsMap)},
@@ -78,7 +78,6 @@ func NewManager(closedHandler, httpHandler *ebpf.PerfHandler) *manager.Manager {
 			{Section: string(probes.TCPSetState)},
 			{Section: string(probes.IPMakeSkb)},
 			{Section: string(probes.IP6MakeSkb)},
-			{Section: string(probes.IP6MakeSkbPre470)},
 			{Section: string(probes.UDPRecvMsg)},
 			{Section: string(probes.UDPRecvMsgPre410), MatchFuncName: "^udp_recvmsg$"},
 			{Section: string(probes.UDPRecvMsgReturn), KProbeMaxActive: maxActive},
@@ -95,4 +94,10 @@ func NewManager(closedHandler, httpHandler *ebpf.PerfHandler) *manager.Manager {
 			{Section: string(probes.SocketHTTPFilter)},
 		},
 	}
+
+	if !runtimeTracer {
+		mgr.Probes = append(mgr.Probes, &manager.Probe{Section: string(probes.IP6MakeSkbPre470)})
+	}
+
+	return mgr
 }

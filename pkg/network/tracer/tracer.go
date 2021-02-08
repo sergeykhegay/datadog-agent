@@ -199,7 +199,7 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 	}
 	perfHandlerTCP := ddebpf.NewPerfHandler(closedChannelSize)
 	perfHandlerHTTP := ddebpf.NewPerfHandler(closedChannelSize)
-	m := netebpf.NewManager(perfHandlerTCP, perfHandlerHTTP)
+	m := netebpf.NewManager(perfHandlerTCP, perfHandlerHTTP, runtimeTracer)
 
 	// exclude all non-enabled probes to ensure we don't run into problems with unsupported probe types
 	for _, p := range m.Probes {
